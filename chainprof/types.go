@@ -12,8 +12,8 @@ type Account struct {
 
 type TransactionResult struct {
 	Hash                 string `json:"hash"`
-	MaxFeePerGas         string `json:"maxFeePerGas"`         // Optional: Remove if not customizing gas fees
-	MaxPriorityFeePerGas string `json:"maxPriorityFeePerGas"` // Optional: Remove if not customizing gas fees
+	MaxFeePerGas         string `json:"maxFeePerGas"`          
+	MaxPriorityFeePerGas string `json:"maxPriorityFeePerGas"`  
 	Nonce                string `json:"nonce"`
 	From                 string `json:"from"`
 	To                   string `json:"to"`
@@ -36,7 +36,7 @@ type ChainPerfomance struct {
 	Calldata               string
 	To                     string
 	Value                  string
-	TransactionsPerAccount uint // Optional: Remove if only one type of transaction per account
+	TransactionsPerAccount uint  
 	ExecutionTime          int
 	BlockProductionTime    int
 	InitialBlockNumber     uint64
