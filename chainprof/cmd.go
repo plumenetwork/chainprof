@@ -16,6 +16,7 @@ import (
 func CreateEvaluateCommand() *cobra.Command {
 	var accountsDir, calldataRaw, outfile, rpc, toRaw, valueRaw, password string
 	var transactionsPerAccount uint
+	var iterations uint64  // Added for iteration count
 
 	var value *big.Int
 	var to common.Address
@@ -54,7 +55,9 @@ func CreateEvaluateCommand() *cobra.Command {
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			startTime := time.Now()
-			transactions, accounts, err := EvaluateAccount(rpc, accountsDir, password, calldata, to.String(), value, transactionsPerAccount)
+
+			// Pass the iteration count for specific function calls
+			transactions, accounts, err := EvaluateAccount(rpc, accountsDir, password, calldata, to.String(), value, transactionsPerAccount, iterations)
 			if err != nil {
 				return err
 			}
@@ -79,11 +82,11 @@ func CreateEvaluateCommand() *cobra.Command {
 			}
 
 			fmt.Println("Done!")
-
 			return nil
 		},
 	}
 
+	// Register flags specific to evaluate
 	evaluateCmd.Flags().StringVar(&accountsDir, "accounts-dir", "", "Directory containing accounts to use when profiling the chain")
 	evaluateCmd.Flags().StringVar(&password, "password", "", "Password for accounts")
 	evaluateCmd.Flags().StringVar(&calldataRaw, "calldata", "", "Calldata for profiling transactions")
@@ -92,6 +95,7 @@ func CreateEvaluateCommand() *cobra.Command {
 	evaluateCmd.Flags().StringVar(&toRaw, "to", "", "Address to send profiling transactions to")
 	evaluateCmd.Flags().StringVar(&valueRaw, "value", "", "Value to send with profiling transactions (default: 0)")
 	evaluateCmd.Flags().UintVar(&transactionsPerAccount, "transactions-per-account", 1, "Number of profiling transactions to send per account")
+	evaluateCmd.Flags().Uint64Var(&iterations, "iterations", 100, "Number of iterations for contract functions")  // New flag for iterations
 
 	return evaluateCmd
 }
@@ -105,12 +109,11 @@ func CreateAccountsCommand() *cobra.Command {
 		},
 	}
 
+	// Add subcommands
 	createCmd := CreateAccountsCreateCommand()
 	fundCmd := CreateAccountsFundCommand()
-	fundERC20Cmd := CreateAccountsFundERC20Command()
 	drainCmd := CreateAccountsDrainCommand()
-	drainERC20Cmd := CreateAccountsDrainERC20Command()
-	accountsCmd.AddCommand(createCmd, fundCmd, fundERC20Cmd, drainCmd, drainERC20Cmd)
+	accountsCmd.AddCommand(createCmd, fundCmd, drainCmd)
 
 	return accountsCmd
 }
@@ -141,63 +144,6 @@ WARNING: This is a *very* insecure method to generate accounts. It is using inse
 	createCmd.Flags().IntVarP(&numAccounts, "num-accounts", "n", 1, "Number of accounts to create")
 
 	return createCmd
-}
-
-func CreateAccountsFundERC20Command() *cobra.Command {
-	var accountsDir, keyfile, password, tokenAddress, valueRaw, rpc string
-	var amountToFund *big.Int
-
-	fundCmd := &cobra.Command{
-		Use:   "fund-erc20",
-		Short: "Fund profiling accounts with ERC20 tokens",
-		PreRunE: func(cmd *cobra.Command, args []string) error {
-			if accountsDir == "" {
-				return errors.New("--accounts-dir is required")
-			}
-			if keyfile == "" {
-				return errors.New("--keyfile is required")
-			}
-			if tokenAddress == "" {
-				return errors.New("--token-address is required")
-			}
-
-			amountToFund = new(big.Int)
-			if valueRaw != "" {
-				_, ok := amountToFund.SetString(valueRaw, 10)
-				if !ok {
-					return fmt.Errorf("invalid value: %s", valueRaw)
-				}
-			} else {
-				amountToFund.SetInt64(0)
-			}
-			return nil
-		},
-		RunE: func(cmd *cobra.Command, args []string) error {
-			results, err := FundAccountsERC20(rpc, accountsDir, keyfile, password, tokenAddress, amountToFund)
-			if err != nil {
-				return err
-			}
-
-			output, marshalErr := json.Marshal(results)
-
-			if marshalErr != nil {
-				return marshalErr
-			}
-
-			cmd.Println(string(output))
-
-			return nil
-		},
-	}
-
-	fundCmd.Flags().StringVarP(&accountsDir, "accounts-dir", "d", "", "Directory containing accounts to fund")
-	fundCmd.Flags().StringVarP(&keyfile, "keyfile", "k", "", "Keyfile to use for funding")
-	fundCmd.Flags().StringVarP(&password, "password", "p", "", "Password for keyfile")
-	fundCmd.Flags().StringVarP(&tokenAddress, "token-address", "t", "", "Address of the ERC20 token to use for funding")
-	fundCmd.Flags().StringVarP(&valueRaw, "value", "v", "", "Value to fund accounts with")
-	fundCmd.Flags().StringVarP(&rpc, "rpc", "r", "", "RPC endpoint to use for funding")
-
-	return fundCmd
 }
 
 func CreateAccountsFundCommand() *cobra.Command {
@@ -290,51 +236,6 @@ func CreateAccountsDrainCommand() *cobra.Command {
 	drainCmd.Flags().StringVarP(&sendTo, "send-to", "t", "", "Address to send funds to")
 	drainCmd.Flags().StringVarP(&password, "password", "p", "", "Password for keyfile")
 	drainCmd.Flags().StringVarP(&rpc, "rpc", "r", "", "RPC endpoint to use for funding")
-
-	return drainCmd
-}
-
-func CreateAccountsDrainERC20Command() *cobra.Command {
-	var accountsDir, sendTo, password, rpc, tokenAddress string
-
-	drainCmd := &cobra.Command{
-		Use:   "drain-erc20",
-		Short: "Drain profiling accounts",
-		PreRunE: func(cmd *cobra.Command, args []string) error {
-			if accountsDir == "" {
-				return errors.New("--accounts-dir is required")
-			}
-			if sendTo == "" {
-				return errors.New("--send-to is required")
-			}
-			if tokenAddress == "" {
-				return errors.New("--token-address is required")
-			}
-			return nil
-		},
-		RunE: func(cmd *cobra.Command, args []string) error {
-			results, err := DrainAccountsERC20(rpc, accountsDir, sendTo, password, tokenAddress)
-			if err != nil {
-				return err
-			}
-
-			output, marshalErr := json.Marshal(results)
-
-			if marshalErr != nil {
-				return marshalErr
-			}
-
-			cmd.Println(string(output))
-
-			return nil
-		},
-	}
-
-	drainCmd.Flags().StringVarP(&accountsDir, "accounts-dir", "d", "", "Directory containing accounts to drain")
-	drainCmd.Flags().StringVarP(&sendTo, "send-to", "t", "", "Address to send funds to")
-	drainCmd.Flags().StringVarP(&password, "password", "p", "", "Password for keyfile")
-	drainCmd.Flags().StringVarP(&rpc, "rpc", "r", "", "RPC endpoint to use for funding")
-	drainCmd.Flags().StringVarP(&tokenAddress, "token-address", "a", "", "Address of the ERC20 token to drain")
 
 	return drainCmd
 }

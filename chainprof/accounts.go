@@ -11,12 +11,29 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"strings"
+	"github.com/ethereum/go-ethereum/accounts/abi"
 )
+
+// PrepareCalldataForTestCompute prepares the calldata for the testCompute function with iterations as an argument.
+func PrepareCalldataForTestCompute(iterations uint64) ([]byte, error) {
+	// Define the ABI JSON for the function
+	contractABI, err := abi.JSON(strings.NewReader(`[{"name": "testCompute", "type": "function", "inputs": [{"name": "iterations", "type": "uint256"}], "outputs": []}]`))
+	if err != nil {
+		return nil, err
+	}
+
+	// Pack the arguments for the `testCompute(uint256)` function
+	calldata, err := contractABI.Pack("testCompute", big.NewInt(int64(iterations)))
+	if err != nil {
+		return nil, err
+	}
+
+	return calldata, nil
+}
 
 func CreateAccounts(accountsDir string, numAccounts int, password string) error {
 	fmt.Println("WARNING: This is a *very* insecure method to generate accounts. It is using insecure ScryptN and ScryptP parameters! Do not use this for ANYTHING important please.")
-	// WARNING: This is a *very* insecure method to generate accounts. It is using insecure ScryptN and ScryptP parameters!
-	// Do not use this for ANYTHING important please.
 	s := keystore.NewKeyStore(accountsDir, 2, 8)
 
 	for i := 0; i < numAccounts; i++ {
@@ -141,7 +158,7 @@ func DrainAccountsERC20(rpcURL string, accountsDir string, recipientAddress stri
 	return results, nil
 }
 
-func EvaluateAccount(rpcURL string, accountsDir string, password string, calldata []byte, to string, value *big.Int, transactionsPerAccount uint) ([]TransactionResult, []common.Address, error) {
+func EvaluateAccount(rpcURL string, accountsDir string, password string, calldata []byte, to string, value *big.Int, transactionsPerAccount uint, iterations uint64) ([]TransactionResult, []common.Address, error) {
 	results := []TransactionResult{}
 	transactions := []*types.Transaction{}
 	accounts := []common.Address{}
@@ -156,7 +173,7 @@ func EvaluateAccount(rpcURL string, accountsDir string, password string, calldat
 		return results, accounts, clientErr
 	}
 
-	fmt.Printf("Sending %d transaction for %d accounts\n", transactionsPerAccount, len(keyFiles))
+	fmt.Printf("Sending %d transactions for each of the %d accounts\n", transactionsPerAccount, len(keyFiles))
 
 	for i, keyFile := range keyFiles {
 		key, keyErr := ERC20.KeyFromFile(filepath.Join(accountsDir, keyFile.Name()), password)
@@ -165,7 +182,15 @@ func EvaluateAccount(rpcURL string, accountsDir string, password string, calldat
 		}
 		accounts = append(accounts, key.Address)
 
-		fmt.Printf("%.2f%% - Sending %d transaction for account %s \n", float64(i+1)/float64(len(keyFiles))*100, transactionsPerAccount, key.Address.Hex())
+		fmt.Printf("%.2f%% - Sending %d transactions for account %s\n", float64(i+1)/float64(len(keyFiles))*100, transactionsPerAccount, key.Address.Hex())
+
+		// Generate dynamic calldata for `testCompute` function
+		calldata, err := PrepareCalldataForTestCompute(iterations)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "Failed to prepare calldata:", err.Error())
+			continue
+		}
+
 		accountTransactions, accountResults, sendTransactionsErr := BatchSendTransactionsForAccount(client, key, password, calldata, to, value, transactionsPerAccount)
 		if sendTransactionsErr != nil {
 			fmt.Fprintln(os.Stderr, sendTransactionsErr.Error())

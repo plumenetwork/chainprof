@@ -12,8 +12,8 @@ type Account struct {
 
 type TransactionResult struct {
 	Hash                 string `json:"hash"`
-	MaxFeePerGas         string `json:"maxFeePerGas"`
-	MaxPriorityFeePerGas string `json:"maxPriorityFeePerGas"`
+	MaxFeePerGas         string `json:"maxFeePerGas"`         // Optional: Remove if not customizing gas fees
+	MaxPriorityFeePerGas string `json:"maxPriorityFeePerGas"` // Optional: Remove if not customizing gas fees
 	Nonce                string `json:"nonce"`
 	From                 string `json:"from"`
 	To                   string `json:"to"`
@@ -26,17 +26,17 @@ type TransactionResult struct {
 }
 
 type OptTx struct {
-	MaxFeePerGas         *big.Int
-	MaxPriorityFeePerGas *big.Int
+	MaxFeePerGas         *big.Int // Optional
+	MaxPriorityFeePerGas *big.Int // Optional
 	Nonce                uint64
 }
 
-type ChainPerfomance struct {
+type ChainPerfomance struct { 
 	RPC                    string
 	Calldata               string
 	To                     string
 	Value                  string
-	TransactionsPerAccount uint
+	TransactionsPerAccount uint // Optional: Remove if only one type of transaction per account
 	ExecutionTime          int
 	BlockProductionTime    int
 	InitialBlockNumber     uint64
