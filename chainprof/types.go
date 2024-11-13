@@ -29,6 +29,7 @@ type OptTx struct {
 	MaxFeePerGas         *big.Int // Optional
 	MaxPriorityFeePerGas *big.Int // Optional
 	Nonce                uint64
+	GasLimit             uint64
 }
 
 type ChainPerfomance struct { 

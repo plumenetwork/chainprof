@@ -95,7 +95,7 @@ func CreateEvaluateCommand() *cobra.Command {
 	evaluateCmd.Flags().StringVar(&toRaw, "to", "", "Address to send profiling transactions to")
 	evaluateCmd.Flags().StringVar(&valueRaw, "value", "", "Value to send with profiling transactions (default: 0)")
 	evaluateCmd.Flags().UintVar(&transactionsPerAccount, "transactions-per-account", 1, "Number of profiling transactions to send per account")
-	evaluateCmd.Flags().Uint64Var(&iterations, "iterations", 100, "Number of iterations for contract functions")  // New flag for iterations
+	evaluateCmd.Flags().Uint64Var(&iterations, "iterations", 10000, "Number of iterations for contract functions")  // New flag for iterations
 
 	return evaluateCmd
 }

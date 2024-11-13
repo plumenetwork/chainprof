@@ -13,7 +13,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/ethereum/go-ethereum"
+	//"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -111,33 +111,48 @@ func SendTransaction(client *ethclient.Client, key *keystore.Key, password strin
 
 	recipientAddress := common.HexToAddress(to)
 
-	callMsg := ethereum.CallMsg{
-		From:  key.Address,
-		To:    &recipientAddress,
-		Value: value,
-		Data:  calldata,
+	// callMsg := ethereum.CallMsg{
+	// 	From:  key.Address,
+	// 	To:    &recipientAddress,
+	// 	Value: value,
+	// 	Data:  calldata,
+	// }
+
+		// Hardcoded gas limit
+	gasLimit := uint64(32000000) // Example hardcoded gas limit, adjust as needed
+
+	// Check if a gas limit is specified in opts; otherwise, use the hardcoded limit
+	if opts.GasLimit != 0 {
+		gasLimit = opts.GasLimit
 	}
 
-	gasLimit, gasLimitErr := client.EstimateGas(context.Background(), callMsg)
-	if gasLimitErr != nil {
-		return nil, TransactionResult{}, gasLimitErr
-	}
-
+	// Set default values for MaxFeePerGas and MaxPriorityFeePerGas if not provided
 	if opts.MaxFeePerGas == nil {
-		baseFee, baseFeeErr := client.SuggestGasPrice(context.Background())
-		if baseFeeErr != nil {
-			return nil, TransactionResult{}, baseFeeErr
-		}
-		opts.MaxFeePerGas = baseFee
+		opts.MaxFeePerGas = big.NewInt(1000000000) // 1 Gwei, adjust as needed
+	}
+	if opts.MaxPriorityFeePerGas == nil {
+		opts.MaxPriorityFeePerGas = big.NewInt(1000000000) // 1 Gwei, adjust as needed
 	}
 
-	if opts.MaxPriorityFeePerGas == nil {
-		gasTipCap, gasTipCapErr := client.SuggestGasTipCap(context.Background())
-		if gasTipCapErr != nil {
-			return nil, TransactionResult{}, gasTipCapErr
-		}
-		opts.MaxPriorityFeePerGas = gasTipCap
-	}
+	// if gasLimitErr != nil {
+	// 	return nil, TransactionResult{}, gasLimitErr
+	// }
+
+	// if opts.MaxFeePerGas == nil {
+	// 	baseFee, baseFeeErr := client.SuggestGasPrice(context.Background())
+	// 	if baseFeeErr != nil {
+	// 		return nil, TransactionResult{}, baseFeeErr
+	// 	}
+	// 	opts.MaxFeePerGas = baseFee
+	// }
+
+	// if opts.MaxPriorityFeePerGas == nil {
+	// 	gasTipCap, gasTipCapErr := client.SuggestGasTipCap(context.Background())
+	// 	if gasTipCapErr != nil {
+	// 		return nil, TransactionResult{}, gasTipCapErr
+	// 	}
+	// 	opts.MaxPriorityFeePerGas = gasTipCap
+	// }
 
 	if opts.Nonce == 0 {
 		nonce, nonceErr := client.PendingNonceAt(context.Background(), key.Address)

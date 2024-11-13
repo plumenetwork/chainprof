@@ -5,6 +5,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/G7DAO/chainprof/bindings/ERC20"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
@@ -24,7 +25,8 @@ func PrepareCalldataForTestCompute(iterations uint64) ([]byte, error) {
 	}
 
 	// Pack the arguments for the `testCompute(uint256)` function
-	calldata, err := contractABI.Pack("testCompute", big.NewInt(int64(iterations)))
+	iterations_ := 10000
+	calldata, err := contractABI.Pack("testCompute", big.NewInt(int64(iterations_)))
 	if err != nil {
 		return nil, err
 	}
@@ -163,11 +165,13 @@ func EvaluateAccount(rpcURL string, accountsDir string, password string, calldat
 	transactions := []*types.Transaction{}
 	accounts := []common.Address{}
 
+	// Read account keys
 	keyFiles, keyFileErr := os.ReadDir(accountsDir)
 	if keyFileErr != nil {
 		return results, accounts, keyFileErr
 	}
 
+	// Connect to client
 	client, clientErr := ethclient.Dial(rpcURL)
 	if clientErr != nil {
 		return results, accounts, clientErr
@@ -175,37 +179,55 @@ func EvaluateAccount(rpcURL string, accountsDir string, password string, calldat
 
 	fmt.Printf("Sending %d transactions for each of the %d accounts\n", transactionsPerAccount, len(keyFiles))
 
+	var wg sync.WaitGroup
+	var mu sync.Mutex // For safely appending to results and transactions slices
+
 	for i, keyFile := range keyFiles {
 		key, keyErr := ERC20.KeyFromFile(filepath.Join(accountsDir, keyFile.Name()), password)
 		if keyErr != nil {
-			return results, accounts, keyErr
+			fmt.Fprintln(os.Stderr, "Error reading key:", keyErr)
+			continue
 		}
 		accounts = append(accounts, key.Address)
 
-		fmt.Printf("%.2f%% - Sending %d transactions for account %s\n", float64(i+1)/float64(len(keyFiles))*100, transactionsPerAccount, key.Address.Hex())
+		wg.Add(1)
+		go func(i int, key *keystore.Key) {
+			defer wg.Done()
 
-		// Generate dynamic calldata for `testCompute` function
-		calldata, err := PrepareCalldataForTestCompute(iterations)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "Failed to prepare calldata:", err.Error())
-			continue
-		}
+			fmt.Printf("%.2f%% - Sending %d transactions for account %s\n", float64(i+1)/float64(len(keyFiles))*100, transactionsPerAccount, key.Address.Hex())
 
-		accountTransactions, accountResults, sendTransactionsErr := BatchSendTransactionsForAccount(client, key, password, calldata, to, value, transactionsPerAccount)
-		if sendTransactionsErr != nil {
-			fmt.Fprintln(os.Stderr, sendTransactionsErr.Error())
-			continue
-		}
+			// Prepare unique calldata per account if necessary
+			localCalldata, err := PrepareCalldataForTestCompute(iterations)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "Failed to prepare calldata:", err.Error())
+				return
+			}
 
-		transactions = append(transactions, accountTransactions...)
-		results = append(results, accountResults...)
+			// Send transactions for each account in parallel
+			accountTransactions, accountResults, sendErr := BatchSendTransactionsForAccount(client, key, password, localCalldata, to, value, transactionsPerAccount)
+			if sendErr != nil {
+				fmt.Fprintln(os.Stderr, "Transaction sending error:", sendErr)
+				return
+			}
+
+			// Lock before appending to shared results and transactions
+			mu.Lock()
+			transactions = append(transactions, accountTransactions...)
+			results = append(results, accountResults...)
+			mu.Unlock()
+		}(i, key)
 	}
 
+	// Wait for all goroutines to finish
+	wg.Wait()
+
+	// Wait for transactions to be mined
 	receipts, receiptsErr := BatchWaitForTransactionsToBeMined(client, transactions)
 	if receiptsErr != nil {
 		return results, accounts, receiptsErr
 	}
 
+	// Update transaction results with receipts
 	results = UpdateTransactionResultsWithReceipts(results, receipts)
 
 	return results, accounts, nil
